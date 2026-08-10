@@ -11,7 +11,7 @@ const emit=defineEmits(['cancel','submit'])
         <label class="field-label">Project <span>*</span><select v-model="form.project" class="field-control" required><option value="" disabled>Select project</option><option v-for="option in projectOptions" :key="option" :value="option">{{ option }}</option></select></label>
         <label class="field-label">Product <span>*</span><select v-model="form.product" class="field-control" required><option value="" disabled>Select product</option><option v-for="option in productOptions" :key="option" :value="option">{{ option }}</option></select></label>
         <label class="field-label">Technology <span>*</span><select v-model="form.technology" class="field-control" required><option value="" disabled>Select technology</option><option v-for="option in technologyOptions" :key="option" :value="option">{{ option }}</option></select></label>
-        <label class="field-label">Fail Type<input v-model.trim="form.fail_type" class="field-control" required placeholder="Enter fail type" /></label>
+        <label class="field-label">Fail Type<input v-model.trim="form.fail_type" class="field-control" placeholder="Enter fail type" /></label>
         <label class="field-label">Fail Mode <span>*</span><input v-model.trim="form.fail_model" class="field-control" required placeholder="Enter fail mode" /></label>
         <div class="create-actions"><button type="button" class="home-danger-button" @click="emit('cancel')">取消</button><button class="home-primary-button" :disabled="saving">{{ saving?'提交中…':'提交' }}</button></div>
       </section>

@@ -6,12 +6,16 @@ from app.extensions import db
 class Case(db.Model):
     __tablename__ = "fa_cases"
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id = db.Column(
+        db.BigInteger().with_variant(db.Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
     case_id = db.Column(db.String(50), unique=True, nullable=False, index=True)
     project = db.Column(db.String(100), nullable=False, index=True)
     product = db.Column(db.String(100), nullable=False, index=True)
     technology = db.Column(db.String(100), nullable=False)
-    fail_type = db.Column(db.String(100), nullable=False, index=True)
+    fail_type = db.Column(db.String(100), nullable=True, index=True)
     fail_model = db.Column(db.String(100), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(

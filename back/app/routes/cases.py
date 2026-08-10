@@ -4,11 +4,11 @@ from sqlalchemy import or_
 from app.extensions import db
 from app.models import Case
 from app.schemas.case_schema import CASE_FIELDS, validate_case_payload
+from app.services.case_service import generate_case_id
+from app.services.data_dictionary_service import grouped_options
 
 
 cases_bp = Blueprint("cases", __name__)
-
-
 def response(data=None, message="success", code=0, status=200):
     return {"code": code, "message": message, "data": data}, status
 
@@ -42,14 +42,31 @@ def get_case(item_id):
     return response(item.to_dict())
 
 
+@cases_bp.get("/options")
+def get_case_options():
+    options = grouped_options()
+    return response({
+        "projects": options["project"],
+        "products": options["product"],
+        "technologies": options["technology"],
+    })
+
+
+@cases_bp.get("/next-case-id")
+def get_next_case_id():
+    return response({"case_id": generate_case_id()})
+
+
 @cases_bp.post("")
 def create_case():
     payload, error = validate_case_payload(request.get_json(silent=True))
     if error:
         return response(None, error, 4001, 400)
-    if Case.query.filter_by(case_id=payload["case_id"]).first():
-        return response(None, "case_id already exists", 4002, 409)
-    item = Case(**payload)
+    try:
+        case_id = generate_case_id()
+    except ValueError as error:
+        return response(None, str(error), 4003, 409)
+    item = Case(case_id=case_id, **payload)
     db.session.add(item)
     db.session.commit()
     return response(item.to_dict(), status=201)
@@ -61,9 +78,6 @@ def update_case(item_id):
     payload, error = validate_case_payload(request.get_json(silent=True))
     if error:
         return response(None, error, 4001, 400)
-    duplicate = Case.query.filter(Case.case_id == payload["case_id"], Case.id != item_id).first()
-    if duplicate:
-        return response(None, "case_id already exists", 4002, 409)
     for field, value in payload.items():
         setattr(item, field, value)
     db.session.commit()
@@ -81,7 +95,7 @@ def delete_case(item_id):
 @cases_bp.post("/batch-delete")
 def batch_delete_cases():
     ids = (request.get_json(silent=True) or {}).get("ids", [])
-    if not ids or not all(isinstance(item_id, int) for item_id in ids):
+    if not ids or not all(isinstance(item_id, int) and not isinstance(item_id, bool) and item_id > 0 for item_id in ids):
         return response(None, "ids must be a non-empty integer array", 4001, 400)
     deleted = Case.query.filter(Case.id.in_(ids)).delete(synchronize_session=False)
     db.session.commit()

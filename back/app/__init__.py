@@ -2,8 +2,10 @@ from flask import Flask
 
 from .config import Config
 from .extensions import cors, db, migrate
+from .errors import register_error_handlers
 from .routes.cases import cases_bp
 from .routes.dashboard import dashboard_bp
+from .routes.data_dictionaries import data_dictionaries_bp
 from .routes.health import health_bp
 
 
@@ -18,5 +20,7 @@ def create_app(config_class=Config):
     app.register_blueprint(health_bp, url_prefix="/api/v1")
     app.register_blueprint(cases_bp, url_prefix="/api/v1/cases")
     app.register_blueprint(dashboard_bp, url_prefix="/api/v1/dashboard")
+    app.register_blueprint(data_dictionaries_bp, url_prefix="/api/v1/data-dictionaries")
+    register_error_handlers(app)
 
     return app
