@@ -10,5 +10,8 @@ import './topbar-1920x32.css'
 import './gds-setup-simplify.css'
 import './gds-task-type-modal.css'
 import './gds-task-type-modal.js'
+import './heatmap-sem-hover.css'
+import { installHeatmapSemHover } from './heatmap-sem-hover.js'
 
 createApp(App).mount('#app')
+installHeatmapSemHover()
