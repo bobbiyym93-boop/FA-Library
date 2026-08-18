@@ -1,103 +1,194 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, defineAsyncComponent, reactive, ref } from 'vue'
+
+const LargeDensityHeatmap=defineAsyncComponent(()=>import('./LargeDensityHeatmap.vue'))
+const LargeGradientHeatmap=defineAsyncComponent(()=>import('./LargeGradientHeatmap.vue'))
 
 const activeTab=ref('setup')
 const selectedTaskId=ref(null)
+const openedTaskIds=ref([])
 const selectedTaskIds=ref([])
 const tasks=ref([])
-const tclOpen=ref(false)
+const inputModalOpen=ref(false)
 const densityModalOpen=ref(false)
 const patternModalOpen=ref(false)
-const tclInput=ref('density::analyze -layer M1 -step 100')
-const tclLog=ref([])
+const workflowModalOpen=ref(false)
+const xmlModalOpen=ref(false)
+const xmlSourceTask=ref(null)
+const xmlContent=ref('')
+const xmlError=ref('')
+const xmlFileInput=ref(null)
+const historyModalOpen=ref(false)
+const semPreview=ref(null)
+const workflowName=ref('')
+const workflowNameError=ref('')
+const workflowSelectionError=ref('')
+const selectedLayerNames=ref([])
+const selectedHistoryIds=ref([])
+const selectedDensityStatistic=ref('mean')
 const common=reactive({project:'',gdsName:''})
-const runOptions=reactive({density:true,pattern:false})
+const runOptions=reactive({density:true,pattern:true})
 const densityForm=reactive({layer:'M1',compareLayer:'M2',stepUm:100,widthUm:500,heightUm:500,negativeSpec:-0.08,positiveSpec:0.08})
-const patternForm=reactive({patternFile:'pattern.xml'})
+const patternForm=reactive({patternName:''})
 const selectedTask=computed(()=>tasks.value.find(t=>t.id===selectedTaskId.value)||null)
+const openedTasks=computed(()=>openedTaskIds.value.map(id=>tasks.value.find(t=>t.id===id)).filter(Boolean))
 const allSelected=computed(()=>tasks.value.length>0&&tasks.value.every(t=>selectedTaskIds.value.includes(t.id)))
-const resultTabs=computed(()=>{
+const resultGroups=computed(()=>{
   const task=selectedTask.value
   if(!task)return[]
-  const tabs=[['results','结果']]
-  if(task.modules.density)tabs.push(['compare','layer 对比'],['gradient','梯度 Spec'],['history','历史'])
-  tabs.push(['fa','FA 关联'])
-  return tabs
+  const groups=[]
+  if(task.modules.density)groups.push(['density-analysis','Density 结果'])
+  if(task.modules.pattern)groups.push(['pattern-result','Pattern Match 结果'])
+  return groups
 })
+const densityTabs=[['density-analysis','Density 分析'],['gradient','梯度分析'],['fa','FA 分析']]
 
 function seed(text){let v=0;for(const c of String(text))v=(v*31+c.charCodeAt(0))>>>0;return v}
 function densityValues(key,count=120,shift=0){return Array.from({length:count},(_,i)=>Number((.38+((seed(`${key}-${i}`)%210)/1000)+shift).toFixed(4)))}
-function makeDensityResult(task){const values=densityValues(task.id);const mean=values.reduce((a,b)=>a+b,0)/values.length;const variance=values.reduce((a,b)=>a+(b-mean)**2,0)/values.length;const signedGradients=values.slice(1).map((v,i)=>Number((v-values[i]).toFixed(4)));const maxAbsGradient=Math.max(...signedGradients.map(Math.abs));const pValue=.06+(task.id%25)/100;return{values,mean,variance,signedGradients,maxAbsGradient,pValue,pass:signedGradients.every(v=>v>=task.negativeSpec&&v<=task.positiveSpec)&&pValue>=.05}}
+function gaussianValues(key,count=480,sigma=.036){let state=seed(key)||1;const random=()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return(state+.5)/4294967296},values=[];while(values.length<count){const u1=Math.max(random(),1e-9),u2=random(),radius=Math.sqrt(-2*Math.log(u1));values.push(Number((radius*Math.cos(2*Math.PI*u2)*sigma).toFixed(4)));if(values.length<count)values.push(Number((radius*Math.sin(2*Math.PI*u2)*sigma).toFixed(4)))}return values}
+function makeDensityResult(task){const values=densityValues(task.id);const mean=values.reduce((a,b)=>a+b,0)/values.length;const variance=values.reduce((a,b)=>a+(b-mean)**2,0)/values.length;const signedGradients=gaussianValues(`${task.id}-gradient`);const maxAbsGradient=Math.max(...signedGradients.map(Math.abs));const pValue=.06+(task.id%25)/100;return{values,mean,variance,signedGradients,maxAbsGradient,pValue,pass:signedGradients.every(v=>v>=task.negativeSpec&&v<=task.positiveSpec)&&pValue>=.05}}
 function makePatternResult(task){const matched=(seed(`${task.id}-${task.patternFile}`)%5)!==0;return{matched,count:matched?1+(seed(task.patternFile)%24):0}}
 function taskTypeText(task){if(task.modules.density&&task.modules.pattern)return'density + pattern match';if(task.modules.density)return'density';return'pattern match'}
+function densityStatistics(values){const sorted=[...values].sort((a,b)=>a-b),mean=values.reduce((sum,value)=>sum+value,0)/values.length,middle=Math.floor(sorted.length/2);return{mean,max:sorted.at(-1),min:sorted[0],median:sorted.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])/2}}
 function createTask(source='form',overrides={}){
   const density=overrides.density??runOptions.density
   const pattern=overrides.pattern??runOptions.pattern
   if(!density&&!pattern)return
   const id=Date.now()+tasks.value.length
-  const task={id,name:`TASK-${String(tasks.value.length+1).padStart(3,'0')}`,project:common.project||'未命名项目',gdsName:common.gdsName||'demo.gds',modules:{density,pattern},source,createdAt:new Date().toLocaleString()}
+  const task={id,name:overrides.name||`TASK-${String(tasks.value.length+1).padStart(3,'0')}`,project:common.project||'未命名项目',gdsName:common.gdsName||'demo.gds',modules:{density,pattern},source,status:'running',createdAt:new Date().toLocaleString()}
   if(density){Object.assign(task,{layer:densityForm.layer,compareLayer:densityForm.compareLayer,stepUm:Number(densityForm.stepUm),widthUm:Number(densityForm.widthUm),heightUm:Number(densityForm.heightUm),negativeSpec:Number(densityForm.negativeSpec),positiveSpec:Number(densityForm.positiveSpec)});task.densityResult=makeDensityResult(task)}
-  if(pattern){task.patternFile=patternForm.patternFile||'pattern.xml';task.patternResult=makePatternResult(task)}
+  if(pattern){task.patternFile=patternForm.patternName||'未命名 Pattern Match';task.patternResult=makePatternResult(task)}
   tasks.value.unshift(task);selectedTaskId.value=task.id;activeTab.value='setup'
+  window.setTimeout(()=>{const current=tasks.value.find(item=>item.id===id);if(current)current.status='completed'},1800)
 }
-function openTask(task){selectedTaskId.value=task.id;activeTab.value='results'}
+function openDensityConfig(){runOptions.density=true;densityModalOpen.value=true}
+function openPatternConfig(){runOptions.pattern=true;patternModalOpen.value=true}
+function openWorkflowCreate(){workflowName.value='';workflowNameError.value='';workflowSelectionError.value='';workflowModalOpen.value=true}
+function createWorkflow(){
+  const name=workflowName.value.trim()
+  if(!runOptions.density&&!runOptions.pattern){workflowSelectionError.value='请至少选择 Density 或 Pattern Match';return}
+  if(!name){workflowNameError.value='请输入 Workflow 名称';return}
+  createTask('workflow',{name,density:runOptions.density,pattern:runOptions.pattern})
+  workflowModalOpen.value=false
+}
+function escapeXml(value){return String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&apos;')}
+function taskToXml(task){return `<?xml version="1.0" encoding="UTF-8"?>
+<workflow name="${escapeXml(task.name)}">
+  <input gds="${escapeXml(task.gdsName)}" />
+  <nodes>
+${task.modules.density?`    <density enabled="true" layer="${escapeXml(task.layer)}" stepUm="${task.stepUm}" widthUm="${task.widthUm}" heightUm="${task.heightUm}" negativeSpec="${task.negativeSpec}" positiveSpec="${task.positiveSpec}" />\n`:''}${task.modules.pattern?`    <patternMatch enabled="true" file="${escapeXml(task.patternFile)}" />\n`:''}  </nodes>
+</workflow>`}
+function parseWorkflowXml(text){
+  const documentNode=new DOMParser().parseFromString(text,'application/xml')
+  const parseError=documentNode.querySelector('parsererror');if(parseError)throw new Error('XML 格式错误，请检查标签和属性')
+  const workflow=documentNode.querySelector('workflow'),input=documentNode.querySelector('input'),density=documentNode.querySelector('density'),pattern=documentNode.querySelector('patternMatch')
+  if(!workflow)throw new Error('缺少 workflow 根节点');if(!density&&!pattern)throw new Error('XML 中至少需要一个 density 或 patternMatch 节点')
+  return{name:workflow.getAttribute('name')?.trim()||`TASK-${String(tasks.value.length+1).padStart(3,'0')}`,gdsName:input?.getAttribute('gds')?.trim()||'demo.gds',density:!!density,pattern:!!pattern,densityConfig:density?{layer:density.getAttribute('layer')||'M1',stepUm:Number(density.getAttribute('stepUm')||100),widthUm:Number(density.getAttribute('widthUm')||500),heightUm:Number(density.getAttribute('heightUm')||500),negativeSpec:Number(density.getAttribute('negativeSpec')||-.08),positiveSpec:Number(density.getAttribute('positiveSpec')||.08)}:null,patternFile:pattern?.getAttribute('file')||'未命名 Pattern Match'}
+}
+function createTaskFromXml(text){
+  const config=parseWorkflowXml(text),previous={...densityForm},previousPattern=patternForm.patternName,previousGds=common.gdsName
+  common.gdsName=config.gdsName;if(config.densityConfig)Object.assign(densityForm,config.densityConfig);patternForm.patternName=config.patternFile
+  createTask('xml',{name:config.name,density:config.density,pattern:config.pattern})
+  Object.assign(densityForm,previous);patternForm.patternName=previousPattern;common.gdsName=previousGds
+}
+async function uploadXml(event){const file=event.target.files?.[0];event.target.value='';if(!file)return;try{createTaskFromXml(await file.text())}catch(error){xmlError.value=error.message;xmlContent.value=await file.text();xmlSourceTask.value=null;xmlModalOpen.value=true}}
+function openTaskXml(task){xmlSourceTask.value=task;xmlContent.value=taskToXml(task);xmlError.value='';xmlModalOpen.value=true}
+function createFromEditedXml(){try{createTaskFromXml(xmlContent.value);xmlModalOpen.value=false}catch(error){xmlError.value=error.message}}
+function openTask(task){
+  if(!openedTaskIds.value.includes(task.id))openedTaskIds.value.push(task.id)
+  selectedTaskId.value=task.id
+  activeTab.value=task.modules.density?'density-analysis':task.modules.pattern?'pattern-result':'fa'
+  initializeDensityAnalysis(task)
+}
+function activateTaskTab(id){selectedTaskId.value=id;const task=tasks.value.find(item=>item.id===id);activeTab.value=task?.modules.density?'density-analysis':task?.modules.pattern?'pattern-result':'fa';initializeDensityAnalysis(task)}
+function activateResultGroup(tab){activeTab.value=tab}
+function layerOptionsFor(task){return [...new Set([...(task?.layer||'M1').split(',').map(value=>value.trim()).filter(Boolean),'M1','M2','M3','M4'])]}
+function initializeDensityAnalysis(task){
+  if(!task?.modules.density)return
+  selectedLayerNames.value=layerOptionsFor(task).slice(0,2)
+  const actualHistory=tasks.value.filter(item=>item.id!==task.id&&item.modules.density).map(item=>`task-${item.id}`)
+  selectedHistoryIds.value=actualHistory.slice(0,3)
+}
+function closeTaskTab(id){
+  const index=openedTaskIds.value.indexOf(id)
+  openedTaskIds.value=openedTaskIds.value.filter(taskId=>taskId!==id)
+  if(selectedTaskId.value!==id)return
+  const nextId=openedTaskIds.value[Math.min(index,openedTaskIds.value.length-1)]
+    if(nextId){activateTaskTab(nextId)}else backToSetup()
+}
 function backToSetup(){activeTab.value='setup'}
 function toggleTask(id){selectedTaskIds.value=selectedTaskIds.value.includes(id)?selectedTaskIds.value.filter(x=>x!==id):[...selectedTaskIds.value,id]}
 function toggleAll(){selectedTaskIds.value=allSelected.value?[]:tasks.value.map(t=>t.id)}
-function runTcl(){
-  const command=tclInput.value.trim();if(!command)return
-  const density=/density::analyze|density::create/i.test(command)
-  const pattern=/pattern::match|pattern_match::run/i.test(command)
-  const layer=command.match(/-layer\s+(\S+)/i),step=command.match(/-step\s+(\d+(?:\.\d+)?)/i),patternFile=command.match(/-pattern\s+(\S+)/i)
-  if(layer)densityForm.layer=layer[1];if(step)densityForm.stepUm=Number(step[1]);if(patternFile)patternForm.patternFile=patternFile[1]
-  const output=density||pattern?`已新增 ${density&&pattern?'density + pattern match':density?'density':'pattern match'} 任务。`:'command 已执行。'
-  tclLog.value.unshift({command,time:new Date().toLocaleTimeString(),output})
-  if(density||pattern)createTask('tcl',{density,pattern})
+function deleteSelectedTasks(){
+  if(!selectedTaskIds.value.length)return
+  const deletedIds=new Set(selectedTaskIds.value)
+  tasks.value=tasks.value.filter(task=>!deletedIds.has(task.id))
+  openedTaskIds.value=openedTaskIds.value.filter(id=>!deletedIds.has(id))
+  if(deletedIds.has(selectedTaskId.value)){
+    const nextId=openedTaskIds.value.at(-1)
+    if(nextId){activateTaskTab(nextId)}else{selectedTaskId.value=null;activeTab.value='setup'}
+  }
+  selectedTaskIds.value=[]
+}
+function downloadPatternResult(task){
+  const payload={task:task.name,gds:task.gdsName,patternFile:task.patternFile,matched:task.patternResult.matched,matchCount:task.patternResult.count,createdAt:task.createdAt}
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'})
+  const url=URL.createObjectURL(blob),link=document.createElement('a')
+  link.href=url;link.download=`${task.name.replace(/[^a-zA-Z0-9_-]+/g,'_')}-pattern-match-result.json`;link.click();URL.revokeObjectURL(url)
 }
 function updateSpecs(){const t=selectedTask.value;if(!t?.modules.density)return;t.negativeSpec=Number(t.negativeSpec);t.positiveSpec=Number(t.positiveSpec);t.densityResult.pass=t.densityResult.signedGradients.every(v=>v>=t.negativeSpec&&v<=t.positiveSpec)&&t.densityResult.pValue>=.05}
-const compareValues=computed(()=>selectedTask.value?.modules.density?densityValues(`${selectedTask.value.id}-${selectedTask.value.compareLayer}`,120,-.012):[])
 const gradientRange=computed(()=>{const t=selectedTask.value;if(!t?.modules.density)return .1;return Math.max(Math.abs(t.negativeSpec),Math.abs(t.positiveSpec),...t.densityResult.signedGradients.map(Math.abs),.01)})
 const gradientBins=computed(()=>{const t=selectedTask.value;if(!t?.modules.density)return[];const vals=t.densityResult.signedGradients,max=gradientRange.value,count=16;return Array.from({length:count},(_,i)=>{const lo=-max+(2*max*i/count),hi=-max+(2*max*(i+1)/count);return{lo,hi,count:vals.filter(v=>v>=lo&&(i===count-1?v<=hi:v<hi)).length}})})
-const historyData=computed(()=>{const t=selectedTask.value;if(!t?.modules.density)return[];return[{project:t.project||'当前项目',density:t.densityResult.mean,gradient:t.densityResult.maxAbsGradient},{project:'History-A',density:.468,gradient:.061},{project:'History-B',density:.451,gradient:.073},{project:'History-C',density:.492,gradient:.052},{project:'History-D',density:.438,gradient:.081}]})
-const faCases=computed(()=>{const t=selectedTask.value;if(!t)return[];const p=t.project||'Demo',layer=t.layer||'-',compare=t.compareLayer||'-';return[{caseId:'FA-2026-00127',project:p,product:'Falcon-A',technology:'N5',failType:'Open',failModel:'Via open / high resistance',layer,sem:'open'},{caseId:'FA-2026-00142',project:p,product:'Falcon-A',technology:'N5',failType:'Short',failModel:'Metal bridge',layer:compare,sem:'bridge'},{caseId:'FA-2026-00168',project:p,product:'Falcon-B',technology:'N5',failType:'Leakage',failModel:'Local density hotspot correlation',layer,sem:'hotspot'}]})
+const gradientFit=computed(()=>{const task=selectedTask.value,bins=gradientBins.value;if(!task?.modules.density||!bins.length)return{points:'',mean:0,stdDev:0};const values=task.densityResult.signedGradients,mean=values.reduce((sum,value)=>sum+value,0)/values.length,stdDev=Math.sqrt(values.reduce((sum,value)=>sum+(value-mean)**2,0)/values.length),binWidth=bins[0].hi-bins[0].lo,expected=bins.map(bin=>{const x=(bin.lo+bin.hi)/2;return Math.exp(-.5*((x-mean)/stdDev)**2)/(stdDev*Math.sqrt(2*Math.PI))*values.length*binWidth}),scale=Math.max(...bins.map(bin=>bin.count),...expected,1);return{mean,stdDev,points:expected.map((value,index)=>`${((index+.5)/bins.length*100).toFixed(2)},${(230-value/scale*180).toFixed(2)}`).join(' ')}})
+function buildLayerGradientAnalysis(task,layer){const values=gaussianValues(`${task.id}-${layer}-gradient`),range=Math.max(Math.abs(task.negativeSpec),Math.abs(task.positiveSpec),...values.map(Math.abs),.01),count=16,bins=Array.from({length:count},(_,index)=>{const lo=-range+2*range*index/count,hi=-range+2*range*(index+1)/count;return{lo,hi,count:values.filter(value=>value>=lo&&(index===count-1?value<=hi:value<hi)).length}}),mean=values.reduce((sum,value)=>sum+value,0)/values.length,stdDev=Math.sqrt(values.reduce((sum,value)=>sum+(value-mean)**2,0)/values.length),binWidth=bins[0].hi-bins[0].lo,expected=bins.map(bin=>{const x=(bin.lo+bin.hi)/2;return Math.exp(-.5*((x-mean)/stdDev)**2)/(stdDev*Math.sqrt(2*Math.PI))*values.length*binWidth}),scale=Math.max(...bins.map(bin=>bin.count),...expected,1),fitPoints=expected.map((value,index)=>`${((index+.5)/bins.length*100).toFixed(2)},${(230-value/scale*180).toFixed(2)}`).join(' ');return{layer,range,bins,mean,stdDev,fitPoints,maxBinCount:Math.max(...bins.map(bin=>bin.count),1)}}
+const gradientLayerAnalyses=computed(()=>{const task=selectedTask.value;if(!task?.modules.density)return[];return selectedLayerNames.value.map(layer=>buildLayerGradientAnalysis(task,layer))})
+const densityLayerOptions=computed(()=>selectedTask.value?.modules.density?layerOptionsFor(selectedTask.value):[])
+const selectedLayerHeatmaps=computed(()=>{const task=selectedTask.value;if(!task?.modules.density)return[];return selectedLayerNames.value.map(layer=>{const values=densityValues(`${task.id}-${layer}`,240);const mean=values.reduce((sum,value)=>sum+value,0)/values.length;const variance=values.reduce((sum,value)=>sum+(value-mean)**2,0)/values.length;return{layer,mean,variance,pValue:.05+(seed(`${task.id}-${layer}-p`)%250)/1000}})})
+const historyOptions=computed(()=>{const task=selectedTask.value;if(!task?.modules.density)return[];return tasks.value.filter(item=>item.id!==task.id&&item.modules.density).map(item=>({id:`task-${item.id}`,name:item.name,statistics:densityStatistics(item.densityResult.values),gradient:item.densityResult.maxAbsGradient,status:item.status,createdAt:item.createdAt}))})
+const historyComparisonData=computed(()=>{const task=selectedTask.value;if(!task?.modules.density)return[];const statistic=selectedDensityStatistic.value;return[{id:'current',project:`当前 · ${task.name}`,density:densityStatistics(task.densityResult.values)[statistic],gradient:task.densityResult.maxAbsGradient},...historyOptions.value.filter(item=>selectedHistoryIds.value.includes(item.id)).map(item=>({id:item.id,project:item.name,density:item.statistics[statistic],gradient:item.gradient}))]})
+const historyDensityMax=computed(()=>Math.max(...historyComparisonData.value.map(item=>item.density),.01))
+const historyGradientMax=computed(()=>Math.max(...historyComparisonData.value.map(item=>item.gradient),.01))
+const densityStatisticLabel=computed(()=>({mean:'Mean',max:'Max',min:'Min',median:'Median'})[selectedDensityStatistic.value])
+const faCases=computed(()=>{const t=selectedTask.value;if(!t)return[];const p=t.project||'Demo',layer=t.layer||'-',compare=t.compareLayer||'-';return[{caseId:'FA-2026-00127',gdsLocation:{x:1240,y:860},project:p,product:'Falcon-A',technology:'N5',failType:'Open',failModel:'Via open / high resistance',density:.4821,densityGradient:-.0864,layer,sem:'open'},{caseId:'FA-2026-00142',gdsLocation:{x:2860,y:1540},project:p,product:'Falcon-A',technology:'N5',failType:'Short',failModel:'Metal bridge',density:.5136,densityGradient:.0918,layer:compare,sem:'bridge'},{caseId:'FA-2026-00168',gdsLocation:{x:4180,y:2320},project:p,product:'Falcon-B',technology:'N5',failType:'Leakage',failModel:'Local density hotspot correlation',density:.5572,densityGradient:.0743,layer,sem:'hotspot'}]})
 function heatColor(v){const t=Math.max(0,Math.min(1,(v-.38)/.21));return`hsl(${220-t*190} 76% 52%)`}
 function specPosition(v){const max=gradientRange.value;return Math.max(0,Math.min(100,((v+max)/(2*max))*100))}
+function layerSpecPosition(value,range){return Math.max(0,Math.min(100,((value+range)/(2*range))*100))}
 </script>
 
 <template>
 <main class="density-task-page">
-  <header class="page-head">
-    <div><div class="eyebrow">GDS · density · pattern match</div><h1>GDS 分析</h1><p>一个任务可同时运行 density 与 pattern match，也可以只运行其中一种。</p></div>
-    <div class="head-actions"><button v-if="activeTab==='setup'" class="secondary" @click="tclOpen=true">TCL command</button><button v-else class="secondary" @click="backToSetup">← 返回 Set Up</button></div>
-  </header>
-  <nav v-if="activeTab==='setup'" class="top-nav"><button class="active">Set Up</button></nav>
-  <div v-else-if="selectedTask" class="task-subnav"><div class="crumb"><button @click="backToSetup">Set Up</button><span>›</span><strong>{{ selectedTask.name }}</strong></div><nav><button v-for="tab in resultTabs" :key="tab[0]" :class="{active:activeTab===tab[0]}" @click="activeTab=tab[0]">{{ tab[1] }}</button></nav></div>
+  <nav class="workflow-tabs"><div class="workflow-tab-list"><button class="workflow-tab" :class="{active:activeTab==='setup'}" @click="backToSetup">Set Up</button><div v-for="task in openedTasks" :key="task.id" class="workflow-tab result-tab" :class="{active:selectedTaskId===task.id&&activeTab!=='setup'}"><button @click="activateTaskTab(task.id)">{{ task.name }} · 结果</button><button class="tab-close" :aria-label="`关闭 ${task.name} 结果页签`" @click="closeTaskTab(task.id)">×</button></div></div></nav>
+  <div v-if="activeTab!=='setup'&&selectedTask" class="task-subnav"><nav class="result-group-tabs"><button v-for="tab in resultGroups" :key="tab[0]" :class="{active:activeTab===tab[0]||(tab[0]==='density-analysis'&&['gradient','fa'].includes(activeTab))}" @click="activateResultGroup(tab[0])">{{ tab[1] }}</button></nav><nav v-if="selectedTask.modules.density&&['density-analysis','gradient','fa'].includes(activeTab)" class="density-result-tabs"><button v-for="tab in densityTabs" :key="tab[0]" :class="{active:activeTab===tab[0]}" @click="activeTab=tab[0]">{{ tab[1] }}</button></nav></div>
 
   <section v-if="activeTab==='setup'" class="workspace setup-layout">
-    <div class="panel full common-panel"><div class="panel-head"><div><span>COMMON INPUT</span><h2>公共输入</h2></div></div><div class="form-grid two"><label><span>当前项目</span><input v-model="common.project" placeholder="项目名称"></label><label><span>GDS 文件</span><input v-model="common.gdsName" placeholder="example.gds"></label></div></div>
-    <div class="panel full"><div class="panel-head"><div><span>TASK TYPE</span><h2>选择本次任务包含的分析</h2></div><button class="primary" @click="createTask('form')">创建任务</button></div><div class="task-options">
-      <label :class="{chosen:runOptions.density}"><input v-model="runOptions.density" type="checkbox"><strong>density</strong><span>运行 density 分析</span><button type="button" class="config-button" @click.prevent="densityModalOpen=true">设置输入</button></label>
-      <label :class="{chosen:runOptions.pattern}"><input v-model="runOptions.pattern" type="checkbox"><strong>pattern match</strong><span>运行 pattern match</span><button type="button" class="config-button" @click.prevent="patternModalOpen=true">设置输入</button></label>
-    </div></div>
-    <div class="panel full config-summary"><div><span>density 输入</span><strong>{{ densityForm.layer }} · step {{ densityForm.stepUm }} µm · {{ densityForm.widthUm }} × {{ densityForm.heightUm }} µm</strong><button class="link" @click="densityModalOpen=true">编辑</button></div><div><span>pattern match 输入</span><strong>{{ patternForm.patternFile }}</strong><button class="link" @click="patternModalOpen=true">编辑</button></div></div>
-    <div class="panel full task-table-panel"><div class="panel-head"><div><span>TASKS</span><h2>已创建任务</h2></div><small>可勾选；结果只能从这里进入</small></div><div v-if="!tasks.length" class="empty">暂无任务</div><div v-else class="table-wrap"><table><thead><tr><th><input type="checkbox" :checked="allSelected" @change="toggleAll"></th><th>任务</th><th>分析类型</th><th>项目</th><th>GDS</th><th>来源</th><th></th></tr></thead><tbody><tr v-for="task in tasks" :key="task.id" :class="{selected:selectedTaskIds.includes(task.id)}"><td><input type="checkbox" :checked="selectedTaskIds.includes(task.id)" @change="toggleTask(task.id)"></td><td><strong>{{ task.name }}</strong></td><td>{{ taskTypeText(task) }}</td><td>{{ task.project }}</td><td>{{ task.gdsName }}</td><td>{{ task.source==='tcl'?'TCL':'表单' }}</td><td><button class="link" @click="openTask(task)">查看结果</button></td></tr></tbody></table></div></div>
+    <div class="panel full workflow-panel"><div class="panel-head"><div><span>WORKFLOW SET UP</span><h2>配置分析 Workflow</h2></div><div class="workflow-actions"><input ref="xmlFileInput" class="xml-file-input" type="file" accept=".xml,text/xml,application/xml" @change="uploadXml"><button class="secondary" @click="xmlFileInput.click()">上传 XML</button><button class="primary" @click="openWorkflowCreate">创建 Workflow</button></div></div>
+      <div class="workflow-canvas">
+        <svg class="workflow-links" viewBox="0 0 760 300" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="workflow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z"></path></marker></defs><path d="M250 150 C340 150 350 78 445 78"></path><path d="M250 150 C340 150 350 222 445 222"></path></svg>
+        <button class="workflow-node input-node" type="button" @click="inputModalOpen=true"><span>INPUT</span><strong>输入</strong><small>{{ common.gdsName || '点击输入 GDS' }}</small></button>
+        <div class="workflow-node density-node" :class="{disabled:!runOptions.density}" role="button" tabindex="0" @click="openDensityConfig" @keyup.enter="openDensityConfig"><label class="workflow-select" title="选择 Density" @click.stop><input v-model="runOptions.density" type="checkbox" @change="workflowSelectionError=''"><span>选择 Density</span></label><span>ANALYSIS</span><strong>Density</strong><small>{{ densityForm.layer }} · step {{ densityForm.stepUm }} µm</small></div>
+        <div class="workflow-node pattern-node" :class="{disabled:!runOptions.pattern}" role="button" tabindex="0" @click="openPatternConfig" @keyup.enter="openPatternConfig"><label class="workflow-select" title="选择 Pattern Match" @click.stop><input v-model="runOptions.pattern" type="checkbox" @change="workflowSelectionError=''"><span>选择 Pattern Match</span></label><span>ANALYSIS</span><strong>Pattern Match</strong><small>{{ patternForm.patternName || '点击输入 Pattern 文件' }}</small></div>
+      </div>
+    </div>
+    <div class="panel full task-table-panel"><div class="panel-head"><div><span>TASKS</span><h2>已创建任务</h2></div><button class="delete-tasks" :disabled="!selectedTaskIds.length" @click="deleteSelectedTasks">删除<span v-if="selectedTaskIds.length">（{{ selectedTaskIds.length }}）</span></button></div><div v-if="!tasks.length" class="empty">暂无任务</div><div v-else class="table-wrap"><table><thead><tr><th><input type="checkbox" :checked="allSelected" @change="toggleAll"></th><th>任务</th><th>分析类型</th><th>GDS</th><th>任务状态</th><th>操作</th></tr></thead><tbody><tr v-for="task in tasks" :key="task.id" :class="{selected:selectedTaskIds.includes(task.id)}"><td><input type="checkbox" :checked="selectedTaskIds.includes(task.id)" @change="toggleTask(task.id)"></td><td><strong>{{ task.name }}</strong></td><td>{{ taskTypeText(task) }}</td><td>{{ task.gdsName }}</td><td><span class="task-status" :class="task.status">{{ task.status==='running'?'运行中':'已完成' }}</span></td><td><div class="task-row-actions"><button class="link" @click="openTask(task)">查看结果</button><button class="link" @click="openTaskXml(task)">查看配置</button></div></td></tr></tbody></table></div></div>
   </section>
 
   <section v-else-if="selectedTask" class="workspace result-grid">
-    <div class="panel full task-summary"><div><span>任务</span><strong>{{ selectedTask.name }}</strong></div><div><span>分析类型</span><strong>{{ taskTypeText(selectedTask) }}</strong></div><div><span>项目</span><strong>{{ selectedTask.project }}</strong></div><div><span>GDS</span><strong>{{ selectedTask.gdsName }}</strong></div></div>
-    <template v-if="activeTab==='results'">
-      <div v-if="selectedTask.modules.density" class="panel full"><div class="panel-head"><div><span>DENSITY RESULT</span><h2>density 结果</h2></div></div><div class="metrics-row"><div class="metric"><span>平均 density</span><strong>{{ selectedTask.densityResult.mean.toFixed(4) }}</strong></div><div class="metric"><span>方差</span><strong>{{ selectedTask.densityResult.variance.toFixed(5) }}</strong></div><div class="metric"><span>均匀性 p-value</span><strong>{{ selectedTask.densityResult.pValue.toFixed(3) }}</strong></div><div class="metric"><span>最大 |density gradient|</span><strong>{{ selectedTask.densityResult.maxAbsGradient.toFixed(4) }}</strong></div><div class="metric"><span>综合结果</span><strong :class="selectedTask.densityResult.pass?'ok-text':'warn-text'">{{ selectedTask.densityResult.pass?'通过':'需检查' }}</strong></div></div><div class="heatmap"><i v-for="(v,i) in selectedTask.densityResult.values" :key="i" :style="{background:heatColor(v)}" :title="`row ${Math.floor(i/15)+1}, col ${(i%15)+1}, value ${v.toFixed(4)}`"></i></div><div class="colorbar"><span>0.3800</span><div></div><span>0.5900</span></div></div>
-      <div v-if="selectedTask.modules.pattern" class="panel full pattern-result"><div class="panel-head"><div><span>PATTERN MATCH RESULT</span><h2>pattern match 匹配结果</h2></div></div><div class="match-summary"><div><span>匹配结果</span><strong :class="selectedTask.patternResult.matched?'ok-text':'warn-text'">{{ selectedTask.patternResult.matched?'Match':'No Match' }}</strong></div><div><span>Match 数量</span><strong>{{ selectedTask.patternResult.count }}</strong></div><div><span>pattern 文件</span><strong>{{ selectedTask.patternFile }}</strong></div></div></div>
+    <template v-if="activeTab==='density-analysis'&&selectedTask.modules.density">
+      <div class="panel full density-analysis-panel"><div class="panel-head analysis-control-head"><div><span>DENSITY ANALYSIS</span><h2>Density 对比</h2></div><div class="analysis-checks"><span>选择 Layer</span><label v-for="layer in densityLayerOptions" :key="layer"><input v-model="selectedLayerNames" type="checkbox" :value="layer">{{ layer }}</label></div></div><div v-if="selectedLayerHeatmaps.length" class="layer-heatmap-grid"><div v-for="item in selectedLayerHeatmaps" :key="item.layer" class="layer-heatmap-card"><h3>{{ item.layer }} · 16,000 points</h3><div class="layer-metrics"><div><span>平均 density</span><strong>{{ item.mean.toFixed(4) }}</strong></div><div><span>方差</span><strong>{{ item.variance.toFixed(5) }}</strong></div><div><span>均匀性 p-value</span><strong>{{ item.pValue.toFixed(3) }}</strong></div></div><LargeDensityHeatmap :layer="item.layer" :seed-key="selectedTask.id" /></div></div><div v-else class="analysis-empty">请至少选择一个 Layer</div></div>
+      <div class="panel full density-history-panel"><div class="panel-head analysis-control-head"><div><span>HISTORY COMPARE</span><h2>历史任务对比</h2></div><div class="history-toolbar"><label class="history-stat-select"><span>Density 统计方式</span><select v-model="selectedDensityStatistic"><option value="mean">Mean</option><option value="max">Max</option><option value="min">Min</option><option value="median">Median</option></select></label><button class="history-picker-button" @click="historyModalOpen=true">选择历史任务<span v-if="selectedHistoryIds.length">（{{ selectedHistoryIds.length }}）</span></button></div></div><div class="history-legend"><span><i class="density-dot"></i>Density {{ densityStatisticLabel }}</span><span><i class="gradient-dot"></i>density gradient</span></div><div class="dual-bar-chart"><div v-for="row in historyComparisonData" :key="row.id" class="project-group" :class="{current:row.id==='current'}"><div class="bar-pair"><div class="density-bar" :style="{height:`${Math.max(4,row.density/historyDensityMax*78)}%`}"><b>{{ row.density.toFixed(3) }}</b></div><div class="gradient-bar" :style="{height:`${Math.max(4,row.gradient/historyGradientMax*78)}%`}"><b>{{ row.gradient.toFixed(3) }}</b></div></div><span>{{ row.project }}</span></div></div></div>
     </template>
-    <template v-else-if="activeTab==='compare'&&selectedTask.modules.density"><div class="panel full"><div class="panel-head"><div><span>LAYER COMPARE</span><h2>不同 layer 同区域 heatmap 对比</h2></div></div><div class="dual-heat"><div><h3>{{ selectedTask.layer }}</h3><div class="heatmap"><i v-for="(v,i) in selectedTask.densityResult.values" :key="i" :style="{background:heatColor(v)}" :title="`value ${v.toFixed(4)}`"></i></div><div class="colorbar"><span>0.3800</span><div></div><span>0.5900</span></div></div><div><h3>{{ selectedTask.compareLayer }}</h3><div class="heatmap"><i v-for="(v,i) in compareValues" :key="i" :style="{background:heatColor(v)}" :title="`value ${v.toFixed(4)}`"></i></div><div class="colorbar"><span>0.3800</span><div></div><span>0.5900</span></div></div></div></div></template>
-    <template v-else-if="activeTab==='gradient'&&selectedTask.modules.density"><div class="panel full"><div class="panel-head"><div><span>GRADIENT SPEC</span><h2>signed density gradient 分布</h2></div><div class="dual-spec"><label><span>负 Spec</span><input v-model.number="selectedTask.negativeSpec" type="number" step="0.005" @input="updateSpecs"></label><label><span>正 Spec</span><input v-model.number="selectedTask.positiveSpec" type="number" step="0.005" @input="updateSpecs"></label></div></div><div class="hist-chart"><div v-for="(b,i) in gradientBins" :key="i" class="hist-col"><div class="bar" :style="{height:`${Math.max(4,b.count/Math.max(...gradientBins.map(x=>x.count))*180)}px`}"><small>{{ b.count }}</small></div><span>{{ b.lo.toFixed(2) }}</span></div><div class="zero-line" :style="{left:'50%'}"><b>0</b></div><div class="spec-line" :style="{left:`${specPosition(selectedTask.negativeSpec)}%`}"><b>{{ selectedTask.negativeSpec.toFixed(3) }}</b></div><div class="spec-line" :style="{left:`${specPosition(selectedTask.positiveSpec)}%`}"><b>{{ selectedTask.positiveSpec.toFixed(3) }}</b></div></div></div></template>
-    <template v-else-if="activeTab==='history'&&selectedTask.modules.density"><div class="panel full"><div class="panel-head"><div><span>HISTORY</span><h2>历史项目 density / density gradient</h2></div></div><div class="history-legend"><span><i class="density-dot"></i>density</span><span><i class="gradient-dot"></i>density gradient</span></div><div class="dual-bar-chart"><div v-for="row in historyData" :key="row.project" class="project-group"><div class="bar-pair"><div class="density-bar" :style="{height:`${row.density*330}px`}"><b>{{ row.density.toFixed(3) }}</b></div><div class="gradient-bar" :style="{height:`${row.gradient*1800}px`}"><b>{{ row.gradient.toFixed(3) }}</b></div></div><span>{{ row.project }}</span></div></div></div></template>
-    <template v-else-if="activeTab==='fa'"><div class="panel full"><div class="panel-head"><div><span>FA LIBRARY</span><h2>关联 FA case</h2></div></div><div class="table-wrap"><table><thead><tr><th>Case ID</th><th>项目</th><th>产品</th><th>工艺</th><th>fail type</th><th>fail model</th><th>layer</th><th>SEM 图</th></tr></thead><tbody><tr v-for="row in faCases" :key="row.caseId"><td><strong>{{ row.caseId }}</strong></td><td>{{ row.project }}</td><td>{{ row.product }}</td><td>{{ row.technology }}</td><td>{{ row.failType }}</td><td>{{ row.failModel }}</td><td>{{ row.layer }}</td><td><div class="sem-thumb" :class="`sem-${row.sem}`"><span>SEM</span><i></i></div></td></tr></tbody></table></div></div></template>
+    <template v-else-if="activeTab==='pattern-result'&&selectedTask.modules.pattern"><div class="panel full pattern-result"><div class="panel-head"><div><span>PATTERN MATCH RESULT</span><h2>pattern match 匹配结果</h2></div></div><div class="match-summary"><div><span>匹配结果</span><strong :class="selectedTask.patternResult.matched?'ok-text':'warn-text'">{{ selectedTask.patternResult.matched?'Match':'No Match' }}</strong></div><div><span>Match 数量</span><strong>{{ selectedTask.patternResult.count }}</strong></div><div class="pattern-download-card"><span>结果下载</span><button @click="downloadPatternResult(selectedTask)">下载结果</button></div></div></div></template>
+    <template v-else-if="activeTab==='gradient'&&selectedTask.modules.density"><div class="panel full gradient-analysis-panel"><div class="panel-head analysis-control-head"><div><span>GRADIENT SPEC</span><h2>Density Gradient 对比</h2></div><div class="gradient-head-controls"><div class="analysis-checks"><span>选择 Layer</span><label v-for="layer in densityLayerOptions" :key="layer"><input v-model="selectedLayerNames" type="checkbox" :value="layer">{{ layer }}</label></div><div class="dual-spec"><label><span>负 Spec</span><input v-model.number="selectedTask.negativeSpec" type="number" step="0.005" @input="updateSpecs"></label><label><span>正 Spec</span><input v-model.number="selectedTask.positiveSpec" type="number" step="0.005" @input="updateSpecs"></label></div></div></div><div v-if="gradientLayerAnalyses.length" class="gradient-layer-list"><section v-for="analysis in gradientLayerAnalyses" :key="analysis.layer" class="gradient-layer-card"><div class="gradient-layer-title"><div><span>LAYER</span><h3>{{ analysis.layer }}</h3></div><div class="fit-summary"><span><i></i>正态拟合</span><span>μ = {{ analysis.mean.toFixed(4) }}</span><span>σ = {{ analysis.stdDev.toFixed(4) }}</span></div></div><div class="gradient-layer-grid"><div class="gradient-histogram-wrap"><h4>Gradient 直方图</h4><div class="hist-chart"><svg class="normal-fit-line" viewBox="0 0 100 230" preserveAspectRatio="none" aria-label="正态分布拟合曲线"><polyline :points="analysis.fitPoints"></polyline></svg><div v-for="(bin,index) in analysis.bins" :key="index" class="hist-col"><div class="bar" :style="{height:`${Math.max(4,bin.count/analysis.maxBinCount*180)}px`}"><small>{{ bin.count }}</small></div><span>{{ bin.lo.toFixed(2) }}</span></div><div class="zero-line" :style="{left:'50%'}"><b>0</b></div><div class="spec-line" :style="{left:`${layerSpecPosition(selectedTask.negativeSpec,analysis.range)}%`}"><b>{{ selectedTask.negativeSpec.toFixed(3) }}</b></div><div class="spec-line" :style="{left:`${layerSpecPosition(selectedTask.positiveSpec,analysis.range)}%`}"><b>{{ selectedTask.positiveSpec.toFixed(3) }}</b></div></div></div><div class="gradient-heatmap-wrap"><h4>Gradient Heatmap · 16,000 points</h4><LargeGradientHeatmap :layer="analysis.layer" :seed-key="selectedTask.id" :negative-spec="selectedTask.negativeSpec" :positive-spec="selectedTask.positiveSpec" /></div></div></section></div><div v-else class="analysis-empty">请至少选择一个 Layer</div></div></template>
+    <template v-else-if="activeTab==='fa'"><div class="panel full"><div class="panel-head"><div><span>FA LIBRARY</span><h2>关联 FA case</h2></div></div><div class="table-wrap"><table class="fa-table"><thead><tr><th>Case ID</th><th>GDS Location</th><th>项目</th><th>产品</th><th>工艺</th><th>fail type</th><th>fail model</th><th>Density</th><th>Density Gradient</th><th>layer</th><th>SEM 图</th></tr></thead><tbody><tr v-for="row in faCases" :key="row.caseId"><td><strong>{{ row.caseId }}</strong></td><td class="gds-location">({{ row.gdsLocation.x }}, {{ row.gdsLocation.y }})</td><td>{{ row.project }}</td><td>{{ row.product }}</td><td>{{ row.technology }}</td><td>{{ row.failType }}</td><td>{{ row.failModel }}</td><td class="numeric-value">{{ row.density.toFixed(4) }}</td><td class="numeric-value" :class="row.densityGradient<0?'negative-value':'positive-value'">{{ row.densityGradient>0?'+':'' }}{{ row.densityGradient.toFixed(4) }}</td><td>{{ row.layer }}</td><td><button class="sem-preview-button" :aria-label="`放大 ${row.caseId} SEM 图`" @click="semPreview=row"><span class="sem-thumb" :class="`sem-${row.sem}`"><span>SEM</span><i></i></span></button></td></tr></tbody></table></div></div></template>
   </section>
 
-  <div v-if="densityModalOpen" class="modal-backdrop density-dialog-mask" @click.self="densityModalOpen=false"><div class="analysis-dialog"><div class="dialog-header"><h2>density 输入</h2><button @click="densityModalOpen=false">×</button></div><div class="dialog-body form-grid"><label><span>GDS layer</span><input v-model="densityForm.layer"></label><label><span>对比 layer</span><input v-model="densityForm.compareLayer"></label><label><span>窗口 step (µm)</span><input v-model.number="densityForm.stepUm" type="number"></label><label><span>窗口宽度 (µm)</span><input v-model.number="densityForm.widthUm" type="number"></label><label><span>窗口高度 (µm)</span><input v-model.number="densityForm.heightUm" type="number"></label><label><span>负 Gradient Spec</span><input v-model.number="densityForm.negativeSpec" type="number" step="0.005"></label><label><span>正 Gradient Spec</span><input v-model.number="densityForm.positiveSpec" type="number" step="0.005"></label></div><div class="dialog-actions"><button class="cancel" @click="densityModalOpen=false">取消</button><button class="save" @click="densityModalOpen=false">确认</button></div></div></div>
-  <div v-if="patternModalOpen" class="modal-backdrop density-dialog-mask" @click.self="patternModalOpen=false"><div class="analysis-dialog compact-dialog"><div class="dialog-header"><h2>pattern match 输入</h2><button @click="patternModalOpen=false">×</button></div><div class="dialog-body form-grid one"><label><span>pattern 文件</span><input v-model="patternForm.patternFile" placeholder="pattern.xml / pattern.gds"></label></div><div class="dialog-actions"><button class="cancel" @click="patternModalOpen=false">取消</button><button class="save" @click="patternModalOpen=false">确认</button></div></div></div>
-  <div v-if="tclOpen" class="drawer-mask" @click.self="tclOpen=false"><aside class="tcl-drawer"><div class="drawer-head"><div><span>TCL COMMAND</span><h2>运行 TCL command</h2></div><button @click="tclOpen=false">×</button></div><div class="terminal drawer-terminal"><div class="terminal-log"><div v-if="!tclLog.length" class="terminal-empty">density::analyze -layer M1 -step 100<br>pattern::match -pattern pattern.xml<br>同一 command 同时包含两种命令时会创建组合任务。</div><div v-for="(l,i) in tclLog" :key="i"><p><small>{{ l.time }}</small> $ {{ l.command }}</p><pre>{{ l.output }}</pre></div></div><form @submit.prevent="runTcl"><span>$</span><input v-model="tclInput"><button>运行</button></form></div></aside></div>
+  <div v-if="semPreview" class="modal-backdrop density-dialog-mask sem-preview-mask" @click.self="semPreview=null"><div class="sem-preview-dialog"><div class="dialog-header"><div><h2>{{ semPreview.caseId }} · SEM</h2><small>GDS Location ({{ semPreview.gdsLocation.x }}, {{ semPreview.gdsLocation.y }})</small></div><button @click="semPreview=null">×</button></div><div class="sem-preview-image" :class="`sem-${semPreview.sem}`"><span>SEM</span><i></i></div></div></div>
+  <div v-if="historyModalOpen" class="modal-backdrop density-dialog-mask" @click.self="historyModalOpen=false"><div class="analysis-dialog compact-dialog"><div class="dialog-header"><h2>选择历史任务</h2><button @click="historyModalOpen=false">×</button></div><div class="dialog-body history-task-picker"><div v-if="!historyOptions.length" class="history-picker-empty">暂无其他 Density 任务</div><label v-for="item in historyOptions" v-else :key="item.id" class="history-task-option"><input v-model="selectedHistoryIds" type="checkbox" :value="item.id"><span><strong>{{ item.name }}</strong><small>{{ item.status==='completed'?'已完成':'运行中' }} · {{ item.createdAt }}</small></span></label></div><div class="dialog-actions"><button class="cancel" @click="selectedHistoryIds=[]">清空选择</button><button class="save" @click="historyModalOpen=false">确认</button></div></div></div>
+  <div v-if="inputModalOpen" class="modal-backdrop density-dialog-mask" @click.self="inputModalOpen=false"><div class="analysis-dialog compact-dialog"><div class="dialog-header"><h2>输入配置</h2><button @click="inputModalOpen=false">×</button></div><div class="dialog-body form-grid one"><label><span>GDS 文件</span><input v-model="common.gdsName" placeholder="example.gds"></label></div><div class="dialog-actions"><button class="cancel" @click="inputModalOpen=false">取消</button><button class="save" @click="inputModalOpen=false">确认</button></div></div></div>
+  <div v-if="densityModalOpen" class="modal-backdrop density-dialog-mask" @click.self="densityModalOpen=false"><div class="analysis-dialog"><div class="dialog-header"><h2>Density 配置</h2><button @click="densityModalOpen=false">×</button></div><div class="dialog-body form-grid"><label><span>GDS layer</span><input v-model="densityForm.layer"></label><label><span>窗口 step (µm)</span><input v-model.number="densityForm.stepUm" type="number"></label><label><span>窗口宽度 (µm)</span><input v-model.number="densityForm.widthUm" type="number"></label><label><span>窗口高度 (µm)</span><input v-model.number="densityForm.heightUm" type="number"></label></div><div class="dialog-actions"><button class="cancel" @click="densityModalOpen=false">取消</button><button class="save" @click="densityModalOpen=false">确认</button></div></div></div>
+  <div v-if="patternModalOpen" class="modal-backdrop density-dialog-mask" @click.self="patternModalOpen=false"><div class="analysis-dialog compact-dialog"><div class="dialog-header"><h2>Pattern Match 配置</h2><button @click="patternModalOpen=false">×</button></div><div class="dialog-body form-grid one"><label><span>Pattern 文件</span><input v-model="patternForm.patternName" placeholder="请输入 Pattern 文件"></label></div><div class="dialog-actions"><button class="cancel" @click="patternModalOpen=false">取消</button><button class="save" @click="patternModalOpen=false">确认</button></div></div></div>
+  <div v-if="workflowModalOpen" class="modal-backdrop density-dialog-mask" @click.self="workflowModalOpen=false"><div class="analysis-dialog compact-dialog"><div class="dialog-header"><h2>创建 Workflow</h2><button @click="workflowModalOpen=false">×</button></div><div class="dialog-body form-grid one"><div class="workflow-selection-summary"><span>已选择分析</span><strong>{{ [runOptions.density?'Density':'',runOptions.pattern?'Pattern Match':''].filter(Boolean).join(' + ') || '未选择' }}</strong><small v-if="workflowSelectionError" class="field-error">{{ workflowSelectionError }}</small></div><label><span>Workflow 名称（任务名）</span><input v-model="workflowName" placeholder="请输入 Workflow 名称" @keyup.enter="createWorkflow" @input="workflowNameError=''"> <small v-if="workflowNameError" class="field-error">{{ workflowNameError }}</small></label></div><div class="dialog-actions"><button class="cancel" @click="workflowModalOpen=false">取消</button><button class="save" @click="createWorkflow">创建</button></div></div></div>
+  <div v-if="xmlModalOpen" class="modal-backdrop density-dialog-mask" @click.self="xmlModalOpen=false"><div class="analysis-dialog xml-dialog"><div class="dialog-header"><div><h2>{{ xmlSourceTask?'查看并复用任务 XML':'导入 XML' }}</h2><small v-if="xmlSourceTask">修改任务名或节点参数后，可快速创建新任务</small></div><button @click="xmlModalOpen=false">×</button></div><div class="dialog-body xml-editor-body"><textarea v-model="xmlContent" spellcheck="false" @input="xmlError=''"> </textarea><small v-if="xmlError" class="field-error">{{ xmlError }}</small></div><div class="dialog-actions"><button class="cancel" @click="xmlModalOpen=false">取消</button><button class="save" @click="createFromEditedXml">生成新任务</button></div></div></div>
 </main>
 </template>
 

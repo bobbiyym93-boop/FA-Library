@@ -72,7 +72,6 @@
 .density-task-page .history-legend{padding:7px 10px;border-radius:8px;background:#f8fafc;width:max-content}
 .density-task-page .sem-thumb{width:126px!important;height:76px!important;border-radius:8px!important;box-shadow:inset 0 0 18px #111,0 2px 8px rgba(15,23,42,.12)!important}
 .density-task-page .drawer-mask{background:rgba(15,23,42,.36)!important;backdrop-filter:blur(2px)}
-.density-task-page .tcl-drawer{width:min(560px,94vw)!important;padding:26px!important;box-shadow:-24px 0 60px rgba(15,23,42,.24)!important}
 .density-task-page .drawer-head{padding-bottom:16px;border-bottom:1px solid #e8edf3}
 .density-task-page .drawer-head button{cursor:pointer;transition:background .15s ease,transform .15s ease}
 .density-task-page .drawer-head button:hover{background:#e7edf5!important;transform:rotate(4deg)}
