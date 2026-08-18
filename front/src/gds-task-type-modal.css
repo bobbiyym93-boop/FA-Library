@@ -1,0 +1,17 @@
+.density-task-page .density-dialog-mask {
+  display: grid !important;
+}
+
+.density-task-page .task-options label {
+  cursor: pointer;
+}
+
+.density-task-page .task-options label:hover {
+  border-color: #91b7f5 !important;
+  background: #f7faff !important;
+}
+
+.density-task-page .config-button,
+.density-task-page .config-summary {
+  display: none !important;
+}

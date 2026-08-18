@@ -8,5 +8,7 @@ import './arial-font.css'
 import './gds-analysis-polish.css'
 import './topbar-1920x32.css'
 import './gds-setup-simplify.css'
+import './gds-task-type-modal.css'
+import './gds-task-type-modal.js'
 
 createApp(App).mount('#app')
