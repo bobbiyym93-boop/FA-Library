@@ -6,5 +6,6 @@ import './density-layout-fix.css'
 import './sidebar-collapse.css'
 import './arial-font.css'
 import './gds-analysis-polish.css'
+import './topbar-1920x32.css'
 
 createApp(App).mount('#app')
