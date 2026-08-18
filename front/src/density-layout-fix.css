@@ -1,0 +1,14 @@
+/* Align the GDS Density workspace with the application's fixed chrome.
+   The global header is 50px tall and the left sidebar is 272px wide. */
+.density-page {
+  margin-left: 272px !important;
+  padding-top: 80px !important;
+  min-height: 100vh !important;
+}
+
+@media (max-width: 900px) {
+  .density-page {
+    margin-left: 272px !important;
+    min-width: 720px;
+  }
+}
