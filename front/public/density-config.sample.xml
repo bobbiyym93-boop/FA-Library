@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<densityConfig version="1.0">
+  <name>M1-production-check</name>
+  <project>Orion-A12</project>
+  <gdsLayer>M1</gdsLayer>
+  <compareLayer>M2</compareLayer>
+  <window stepUm="100" widthUm="500" heightUm="500"/>
+  <spec varianceMax="0.0025" gradientMax="0.08" uniformityAlpha="0.05"/>
+</densityConfig>
