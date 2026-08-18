@@ -5,5 +5,6 @@ import './wide-screen.css'
 import './density-layout-fix.css'
 import './sidebar-collapse.css'
 import './arial-font.css'
+import './gds-analysis-polish.css'
 
 createApp(App).mount('#app')
