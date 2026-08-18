@@ -1,0 +1,64 @@
+/* 1920x1080 desktop readability overrides */
+@media (min-width: 1500px) {
+  :root { font-size: 16px; }
+
+  .topbar { height: 56px; }
+  .brand { width: 104px; height: 36px; font-size: 20px; }
+
+  .sidebar { top: 56px; width: 288px; padding: 18px 14px; }
+  .sidebar button { height: 48px; font-size: 15px; }
+  .nav-child { padding-left: 44px; }
+
+  .content { margin-left: 288px; padding-top: 56px; }
+  .create-content { margin-left: 288px; padding-top: 56px; }
+  .dictionary-content { margin-left: 288px; }
+
+  .charts { height: 214px; padding: 18px 20px 0; grid-template-columns: 460px minmax(620px, 1fr); gap: 18px; }
+  .card { height: 196px; }
+  .card h2 { margin-top: 10px; font-size: 15px; }
+  .product-chart-body { height: 158px; gap: 34px; padding-left: 40px; }
+  .pie { width: 124px; height: 124px; }
+  .legend { max-height: 124px; font-size: 13px; gap: 11px; }
+  .legend i { width: 11px; height: 11px; }
+
+  .axis-title-y { top: 17px; font-size: 12px; }
+  .axis-title-x { bottom: 5px; font-size: 11px; }
+  .plot { left: 52px; right: 22px; top: 43px; height: 132px; gap: 10px; padding-bottom: 27px; }
+  .grid-line .tick { font-size: 11px; }
+  .bar-column span { width: 72px; font-size: 10px; top: 58px; }
+  .dynamic-plot .bar-column span { top: 101px; }
+
+  .toolbar { height: 60px; padding: 9px 20px 11px; }
+  .search { width: 360px; height: 40px; padding: 0 14px; }
+  .search input { font-size: 15px; }
+  .button, .home-primary-button, .home-danger-button { width: 92px; height: 40px; font-size: 15px; }
+
+  .table-area { min-height: calc(100vh - 330px); padding: 18px 20px; }
+  .table-card { min-height: 620px; }
+  table { min-width: 1180px; font-size: 14px; }
+  th, td { height: 60px; padding: 0 14px; }
+  th { height: 52px; font-size: 14px; }
+  th.check, td.check { width: 52px; }
+  th:nth-child(2) { width: 140px; }
+  th:nth-child(3) { width: 190px; }
+  th:nth-child(4) { width: 170px; }
+  th:nth-child(5) { width: 190px; }
+  th:nth-child(6) { width: 170px; }
+  th:nth-child(7) { width: 190px; }
+  th:nth-child(8) { width: 180px; }
+
+  input[type="checkbox"] { width: 18px; height: 18px; }
+  input[type="checkbox"]:checked::after { left: 5px; top: 1px; width: 4px; height: 9px; }
+
+  .row-actions { gap: 18px; }
+  .row-actions button, .row-actions img { width: 20px; height: 20px; }
+
+  .pagination { height: 70px; gap: 10px; font-size: 14px; }
+  .pagination button { min-width: 36px; height: 36px; font-size: 14px; }
+
+  .error-banner { font-size: 14px; }
+
+  .dialog-header h2, .analysis-panel h2, .information-panel h1 { font-size: 19px; }
+  .form-grid label, .dictionary-heading p, .dictionary-add, .dictionary-actions button { font-size: 14px; }
+  .form-grid input { height: 42px; font-size: 14px; }
+}
