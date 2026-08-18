@@ -1,8 +1,9 @@
 <script setup>
+import deleteIcon from '../assets/icon-delete.svg'
+import editIcon from '../assets/icon-edit.svg'
+
 const props = defineProps({ cases:{type:Array,default:()=>[]}, selected:{type:Array,default:()=>[]}, loading:Boolean, allSelected:Boolean, total:{type:Number,default:0}, currentPage:{type:Number,default:1}, totalPages:{type:Number,default:0}, pageNumbers:{type:Array,default:()=>[]} })
 const emit = defineEmits(['update:selected','toggle-all','view','edit','delete','page'])
-const deleteIcon='https://www.figma.com/api/mcp/asset/0190fa68-8e3e-437d-8db8-d6bc194bb24e.svg'
-const editIcon='https://www.figma.com/api/mcp/asset/ae637a39-3eef-4263-904f-0a5cf1896695.svg'
 function toggleRow(id, checked) { emit('update:selected', checked ? [...new Set([...props.selected,id])] : props.selected.filter(item => item !== id)) }
 </script>
 <template>
