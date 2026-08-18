@@ -1,0 +1,117 @@
+/* Simplify GDS Set Up: keep only common input, task type and task list. */
+.density-task-page .config-button,
+.density-task-page .config-summary,
+.density-task-page .density-dialog-mask {
+  display: none !important;
+}
+
+.density-task-page {
+  background: #f8fafc !important;
+}
+
+.density-task-page .page-head {
+  height: 64px !important;
+  padding: 0 16px !important;
+  background: #fff !important;
+  border-bottom: 1px solid #e5e8ed !important;
+}
+
+.density-task-page .top-nav,
+.density-task-page .task-subnav {
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+}
+
+.density-task-page .workspace {
+  gap: 12px !important;
+  padding: 12px 16px 16px !important;
+}
+
+.density-task-page .setup-layout {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  align-items: start !important;
+}
+
+.density-task-page .setup-layout > .panel {
+  margin: 0 !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.density-task-page .common-panel {
+  padding: 14px 16px !important;
+}
+
+.density-task-page .common-panel .panel-head {
+  margin-bottom: 10px !important;
+}
+
+.density-task-page .task-options {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 220px)) !important;
+  gap: 10px !important;
+  justify-content: start !important;
+}
+
+.density-task-page .task-options label {
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  padding: 12px 14px !important;
+  min-height: 58px !important;
+  border-radius: 8px !important;
+}
+
+.density-task-page .task-options label span {
+  grid-column: 2 !important;
+}
+
+.density-task-page .task-table-panel {
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.density-task-page .task-table-panel .panel-head {
+  min-height: 56px !important;
+  margin: 0 !important;
+  padding: 12px 16px !important;
+  align-items: center !important;
+  border-bottom: 1px solid #e5e8ed !important;
+}
+
+.density-task-page .task-table-panel .empty {
+  min-height: 180px !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 24px !important;
+}
+
+.density-task-page .task-table-panel table {
+  min-width: 760px !important;
+}
+
+.density-task-page .panel-head h2 {
+  font-size: 15px !important;
+}
+
+.density-task-page .panel-head > div > span,
+.density-task-page .eyebrow {
+  letter-spacing: .04em !important;
+}
+
+@media (max-width: 900px) {
+  .density-task-page .task-options {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .density-task-page .workspace {
+    padding: 10px !important;
+  }
+  .density-task-page .page-head,
+  .density-task-page .top-nav,
+  .density-task-page .task-subnav {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+}
