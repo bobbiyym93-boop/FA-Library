@@ -10,11 +10,12 @@ import CaseTable from './components/CaseTable.vue'
 import CaseToolbar from './components/CaseToolbar.vue'
 import DashboardCharts from './components/DashboardCharts.vue'
 import DataDictionaryView from './components/DataDictionaryView.vue'
-import DensityAnalysisView from './components/DensityAnalysisView.vue'
+import DensityTaskView from './components/DensityTaskView.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 
 const query=ref(''), selected=ref([]), currentPage=ref(1), cases=ref([]), loading=ref(false), saving=ref(false), errorMessage=ref(''), createPageOpen=ref(false), detailPageOpen=ref(false), detailEditing=ref(false), editingId=ref(null), detailSnapshot=ref(null)
 const activeView=ref('cases')
+const sidebarCollapsed=ref(false)
 const confirmState=reactive({open:false,title:'确认删除',message:'',action:null,confirming:false})
 const pageSize=10
 const pagination=reactive({total:0,totalPages:0})
@@ -58,12 +59,13 @@ onMounted(()=>Promise.all([refreshPage(),loadCaseOptions()]))
 </script>
 
 <template>
-  <div class="app-shell">
-    <AppHeader/><AppSidebar :active-view="activeView" @navigate="navigate"/>
+  <div class="app-shell" :class="{'sidebar-collapsed':sidebarCollapsed}">
+    <AppHeader/>
+    <AppSidebar :active-view="activeView" :collapsed="sidebarCollapsed" @navigate="navigate" @toggle="sidebarCollapsed=!sidebarCollapsed"/>
     <div v-if="errorMessage" class="error-banner">{{ errorMessage }}<button @click="errorMessage=''">×</button></div>
     <ConfirmDialog :open="confirmState.open" :title="confirmState.title" :message="confirmState.message" :confirming="confirmState.confirming" @cancel="closeConfirm" @confirm="confirmAction"/>
     <DataDictionaryView v-if="activeView==='dictionary'" @updated="loadCaseOptions" @error="errorMessage=$event"/>
-    <DensityAnalysisView v-else-if="activeView==='density'"/>
+    <DensityTaskView v-else-if="activeView==='density'"/>
     <CaseCreateView v-else-if="createPageOpen" :form="form" :saving="saving" :project-options="projectOptions" :product-options="productOptions" :technology-options="technologyOptions" @cancel="cancelCreate" @submit="submitCreate"/>
     <CaseDetailView v-else-if="detailPageOpen" :form="form" :editing="detailEditing" :saving="saving" :project-options="projectOptions" :product-options="productOptions" :technology-options="technologyOptions" @close="closeDetail" @edit="startDetailEdit" @cancel-edit="cancelDetailEdit" @save="saveDetail"/>
     <main v-else class="content">
