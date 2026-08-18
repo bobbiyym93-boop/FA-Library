@@ -1,0 +1,25 @@
+/* 1920 × 32 top title bar baseline */
+.topbar {
+  width: min(1920px, 100vw);
+  max-width: 1920px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+.topbar .brand {
+  width: 72px;
+  height: 24px;
+  border-radius: 5px;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+.sidebar { top: 32px; }
+.content, .create-content { padding-top: 32px; }
+.create-workspace { min-height: calc(100vh - 32px); }
+.error-banner { top: 40px; }
+.dictionary-content { padding-top: 58px; }
+.density-task-page { padding-top: 60px !important; }
+
+@media (max-width: 1920px) { .topbar { width: 100vw; } }
